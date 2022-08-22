@@ -1,1 +1,5 @@
+### Python ###
+__pycache__
+
+# WAV Data
 data/t2-conf/train/train_data/*.wav
