@@ -2,6 +2,8 @@ import os
 def changeName(path, cName):
     i = 1
     for filename in os.listdir(path):
+        if not filename.endswith(".wav"):
+            continue
         print(path+filename, '=>', path+str(cName)+f'{i:06d}'+'.wav')
         os.rename(path+filename, path+str(cName)+f'{i:06d}'+'.wav')
         i += 1
