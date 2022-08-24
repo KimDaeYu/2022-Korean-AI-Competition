@@ -301,9 +301,12 @@ def split(y, top_db=60, ref=np.max, frame_length=2048, hop_length=512):
     return edges.reshape((-1, 2))
 
 def speech_file_to_array_fn(batch):
-    speech_array, sampling_rate = torchaudio.load(batch["path"])
-    batch["speech"] = speech_array[0].numpy()
-    batch["sampling_rate"] = sampling_rate
+    # print(batch["path"])
+    #speech_array, sampling_rate = torchaudio.load(batch["path"])
+    signal = np.memmap(batch["path"], dtype='h', mode='r').astype('float32')
+    #batch["speech"] = speech_array[0].numpy()
+    batch["speech"] = signal
+    batch["sampling_rate"] = 16_000
     batch["target_text"] = batch["text"]
     return batch
 

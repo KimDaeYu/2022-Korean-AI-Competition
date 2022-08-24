@@ -23,7 +23,7 @@ from modules.audio import (
     MfccConfig,
     SpectrogramConfig,
 )
-from modules.model import build_model
+from modules.model import build_model, build_deepspeech2
 from modules.data import load_dataset, DataCollatorCTCWithPadding
 from modules.utils import Optimizer
 from modules.metrics import get_metric
@@ -37,64 +37,36 @@ from torch.utils.data import DataLoader
 from transformers import Wav2Vec2CTCTokenizer
 from transformers import Wav2Vec2FeatureExtractor
 from transformers import Wav2Vec2Processor
-from transformers import TrainingArguments, Trainer
+
 
 import nsml
 from nsml import DATASET_PATH
-# DATASET_PATH="/Users/kdy/2022-Korean-AI-Competition/data/t2-conf"
+
 
 def bind_model(model, optimizer=None):
     def save(path, *args, **kwargs):
-        print("save!!! " + path)
+        print(path)
         state = {
             'model': model.state_dict(),
-            #'optimizer': optimizer.state_dict()
+            'optimizer': optimizer.state_dict()
         }
-        processor.save_pretrained(path)
         torch.save(state, os.path.join(path, 'model.pt'))
         print('Model saved')
 
     def load(path, *args, **kwargs):
-        print("load!!! " + path)
-        processor = Wav2Vec2Processor.from_pretrained(path)
+        print(path)
         state = torch.load(os.path.join(path, 'model.pt'))
         model.load_state_dict(state['model'])
-        # if 'optimizer' in state and optimizer:
-        #     optimizer.load_state_dict(state['optimizer'])
+        if 'optimizer' in state and optimizer:
+            optimizer.load_state_dict(state['optimizer'])
         print('Model loaded')
 
     # 추론
     def infer(path, **kwargs):
-        return inference(path, model, processor)
+        return inference(path, model)
 
-    #nsml.bind(save=save, load=load, infer=infer)  # 'nsml.bind' function must be called at the end.
+    nsml.bind(save=save, load=load, infer=infer)  # 'nsml.bind' function must be called at the end.
 
-def prepare_dataset(batch):
-    # check that all files have the correct sampling rate
-    assert (
-        len(set(batch["sampling_rate"])) == 1
-    ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
-
-    batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
-    
-    with processor.as_target_processor():
-        batch["labels"] = processor(batch["target_text"]).input_ids
-    return batch
-
-def compute_metrics(pred):
-    pred_logits = pred.predictions
-    pred_ids = np.argmax(pred_logits, axis=-1)
-
-    pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id
-
-    pred_str = processor.batch_decode(pred_ids)
-    # we do not want to group tokens when computing the metrics
-    label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
-    ref = pred_str.replace(' ', '')
-    hyp = label_str.replace(' ', '')
-    dist = Lev.distance(hyp, ref)
-    length = len(ref)
-    return {"cer": dist/length}
 
 def inference(path, model, **kwargs):
     model.eval()
@@ -178,78 +150,37 @@ if __name__ == '__main__':
 
     random.seed(config.seed)
     torch.manual_seed(config.seed)
-    torch.cuda.manual_seed_all(config.seed)
     device = 'cuda' if config.use_cuda == True else 'cpu'
     if hasattr(config, "num_threads") and int(config.num_threads) > 0:
         torch.set_num_threads(config.num_threads)
+
+    ###
+    vocab = KoreanSpeechVocabulary(os.path.join(os.getcwd(), 'labels.csv'), output_unit='character')
+    input_size = config.n_mels
+
+    model = build_deepspeech2(
+        input_size=input_size,
+        num_classes=len(vocab),
+        rnn_type=config.rnn_type,
+        num_rnn_layers=config.num_encoder_layers,
+        rnn_hidden_dim=config.hidden_dim,
+        dropout_p=config.dropout,
+        bidirectional=config.use_bidirectional,
+        activation=config.activation,
+        device=device,
+    )
+    ###
+    optimizer = get_optimizer(model, config)
+    bind_model(model, optimizer=optimizer)
 
     if config.pause:
         nsml.paused(scope=locals())
 
     if config.mode == 'train':
-        config.dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
-        label_path = os.path.join(DATASET_PATH, 'train', 'train_label')
-        preprocessing(label_path, os.getcwd())
-        dataset = load_dataset(os.path.join(os.getcwd(), 'transcripts.txt'))
-        
-        train_dataset = dataset['train']
-        test_dataset = dataset['test']
-        train_dataset = train_dataset.map(remove_special_characters)
-        test_dataset = test_dataset.map(remove_special_characters)
-        # make vocab
-        make_wav2vec_vocab(train_dataset, test_dataset)
-        
-        # tokenizer & feature_extractor & processor
-        tokenizer = Wav2Vec2CTCTokenizer("./vocab.json", unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
-        feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=False)
-        processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+        for epoch in range(2):
+            print('[INFO] Epoch %d start' % epoch)
+            nsml.save(epoch)
 
-        model = build_model(config, processor, device)
-        bind_model(model)
-
-        train_dataset = train_dataset.map(speech_file_to_array_fn, remove_columns=train_dataset.column_names)
-        test_dataset = test_dataset.map(speech_file_to_array_fn, remove_columns=test_dataset.column_names)
-        #train_dataset = train_dataset.map(resample)
-        #test_dataset = test_dataset.map(resample)
-        train_dataset = train_dataset.map(prepare_dataset, remove_columns=train_dataset.column_names, batch_size=8, num_proc=1, batched=True)
-        test_dataset = test_dataset.map(prepare_dataset, remove_columns=test_dataset.column_names, batch_size=8, num_proc=1, batched=True)
-
-        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        model = build_model(config, processor, device)
-        model.freeze_feature_extractor()
-
-        training_args = TrainingArguments(
-            output_dir="container_0/ckpts/",
-            logging_dir = "container_0/runs/",
-            group_by_length=True,
-            per_device_train_batch_size=8,
-            per_device_eval_batch_size=8,
-            gradient_accumulation_steps=2,
-            evaluation_strategy="steps",
-            num_train_epochs=30,
-            fp16=True,
-            save_steps=200,
-            eval_steps=200,
-            logging_steps=200,
-            learning_rate=4e-4,
-            warmup_steps=int(0.1*1320), #10%
-            save_total_limit=2,
-        )
-        trainer = Trainer(
-            model=model,
-            data_collator=data_collator,
-            args=training_args,
-            compute_metrics=compute_metrics,
-            train_dataset=train_dataset,
-            eval_dataset=test_dataset,
-            tokenizer=processor.feature_extractor,
-        )
-
-        trainer.train()
-        trainer.save_model("container_0/wav2vec2-large-xlsr-kn")
-
+            torch.cuda.empty_cache()
+            print(f'[INFO] epoch {epoch} is done')
         print('[INFO] train process is done')
-
-
-
-

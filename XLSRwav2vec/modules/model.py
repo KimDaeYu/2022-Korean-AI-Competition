@@ -561,7 +561,7 @@ def build_model(
         gradient_checkpointing=True, 
         ctc_loss_reduction="mean", 
         pad_token_id=processor.tokenizer.pad_token_id,
-        vocab_size=len(processor.tokenizer)
+        vocab_size=len(processor.tokenizer),
     )
 
     return model

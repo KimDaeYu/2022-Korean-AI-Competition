@@ -1,3 +1,4 @@
+#registry koreanai dckr_pat_7OmsQkoAnQyz7ZkQb-ZSk0LeNlI registry.hub.docker.com
 #nsml: pytorch/pytorch:1.6.0-cuda10.1-cudnn7-runtime
 from distutils.core import setup
 

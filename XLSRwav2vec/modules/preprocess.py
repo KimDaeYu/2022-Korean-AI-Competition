@@ -100,15 +100,15 @@ def sentence_to_target(sentence, char2id):
 
     return target[:-1]
 
-
 def generate_character_script(data_df, labels_dest):
     print('[INFO] create_script started..')
     char2id, id2char = load_label(os.path.join(labels_dest, "labels.csv"))
-    DATASET_PATH="../data/t2-conf/train/train_data/"
+    from nsml import DATASET_PATH
+    dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
     with open(os.path.join(labels_dest,"transcripts.txt"), "w+") as f:
         for audio_path, transcript in data_df.values:
             char_id_transcript = sentence_to_target(transcript, char2id)
-            f.write(f'{DATASET_PATH}{audio_path}\t{transcript}\t{char_id_transcript}\n')
+            f.write(f'{dataset_path}/{audio_path}\t{transcript}\t{char_id_transcript}\n')
 
 
 def preprocessing(transcripts_dest, labels_dest):
