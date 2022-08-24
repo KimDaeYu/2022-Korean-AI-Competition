@@ -9,6 +9,7 @@ import argparse
 from glob import glob
 import numpy as np
 import Levenshtein as Lev
+from datasets import load_metric
 
 from modules.preprocess import preprocessing, remove_special_characters
 from modules.trainer import trainer
@@ -28,7 +29,7 @@ from modules.data import load_dataset, DataCollatorCTCWithPadding
 from modules.utils import Optimizer
 from modules.metrics import get_metric
 from modules.inference import single_infer
-from modules.vocab import make_wav2vec_vocab, KoreanSpeechVocabulary
+from modules.vocab import make_wav2vec_vocab
 
 from modules.audio.core import speech_file_to_array_fn, resample
 
@@ -39,9 +40,9 @@ from transformers import Wav2Vec2FeatureExtractor
 from transformers import Wav2Vec2Processor
 from transformers import TrainingArguments, Trainer
 
-import nsml
-from nsml import DATASET_PATH
-# DATASET_PATH="/Users/kdy/2022-Korean-AI-Competition/data/t2-conf"
+#import nsml
+#from nsml import DATASET_PATH
+DATASET_PATH="../data/t2-conf"
 
 def bind_model(model, optimizer=None):
     def save(path, *args, **kwargs):
@@ -81,6 +82,7 @@ def prepare_dataset(batch):
         batch["labels"] = processor(batch["target_text"]).input_ids
     return batch
 
+cer_metric = load_metric('cer')
 def compute_metrics(pred):
     pred_logits = pred.predictions
     pred_ids = np.argmax(pred_logits, axis=-1)
@@ -90,11 +92,14 @@ def compute_metrics(pred):
     pred_str = processor.batch_decode(pred_ids)
     # we do not want to group tokens when computing the metrics
     label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
-    ref = pred_str.replace(' ', '')
-    hyp = label_str.replace(' ', '')
-    dist = Lev.distance(hyp, ref)
-    length = len(ref)
-    return {"cer": dist/length}
+    #ref = [pred.replace(' ', '') for pred in pred_str] 
+    #hyp = [label.replace(' ', '') for label in label_str]
+    print("pred: ",pred_str)
+    print("ref : ",label_str)
+
+    cer = cer_metric.compute(references=label_str, predictions=pred_str)
+
+    return {"cer": cer}
 
 def inference(path, model, **kwargs):
     model.eval()
@@ -183,8 +188,8 @@ if __name__ == '__main__':
     if hasattr(config, "num_threads") and int(config.num_threads) > 0:
         torch.set_num_threads(config.num_threads)
 
-    if config.pause:
-        nsml.paused(scope=locals())
+    #if config.pause:
+    #    nsml.paused(scope=locals())
 
     if config.mode == 'train':
         config.dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
@@ -204,23 +209,23 @@ if __name__ == '__main__':
         feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=False)
         processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-        model = build_model(config, processor, device)
+        model = build_model(config, processor)
         bind_model(model)
 
         train_dataset = train_dataset.map(speech_file_to_array_fn, remove_columns=train_dataset.column_names)
         test_dataset = test_dataset.map(speech_file_to_array_fn, remove_columns=test_dataset.column_names)
-        #train_dataset = train_dataset.map(resample)
-        #test_dataset = test_dataset.map(resample)
+        train_dataset = train_dataset.map(resample)
+        test_dataset = test_dataset.map(resample)
         train_dataset = train_dataset.map(prepare_dataset, remove_columns=train_dataset.column_names, batch_size=8, num_proc=1, batched=True)
         test_dataset = test_dataset.map(prepare_dataset, remove_columns=test_dataset.column_names, batch_size=8, num_proc=1, batched=True)
 
         data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        model = build_model(config, processor, device)
+        model = build_model(config, processor)
         model.freeze_feature_extractor()
 
         training_args = TrainingArguments(
-            output_dir="container_0/ckpts/",
-            logging_dir = "container_0/runs/",
+            output_dir="container_1/ckpts/",
+            logging_dir = "container_1/runs/",
             group_by_length=True,
             per_device_train_batch_size=8,
             per_device_eval_batch_size=8,
@@ -246,7 +251,9 @@ if __name__ == '__main__':
         )
 
         trainer.train()
-        trainer.save_model("container_0/wav2vec2-large-xlsr-kn")
+        trainer.save_model("container_1/wav2vec2-large-960h")
+        
+        # 1. wav2vec2-large-xlsr-kn  #0.3191 cer
 
         print('[INFO] train process is done')
 

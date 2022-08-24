@@ -1,5 +1,10 @@
 ### Python ###
 __pycache__
+.ipynb_checkpoints
+
 
 # WAV Data
 data/t2-conf/train/train_data/*.wav
+
+#chkpoint
+XLSRwav2vec/container_*
