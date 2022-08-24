@@ -8,7 +8,6 @@ import json
 import argparse
 from glob import glob
 import numpy as np
-import Levenshtein as Lev
 from datasets import load_metric
 
 from modules.preprocess import preprocessing, remove_special_characters
@@ -40,35 +39,28 @@ from transformers import Wav2Vec2FeatureExtractor
 from transformers import Wav2Vec2Processor
 from transformers import TrainingArguments, Trainer
 
-#import nsml
-#from nsml import DATASET_PATH
-DATASET_PATH="../data/t2-conf"
+import nsml
+from nsml import DATASET_PATH
+#DATASET_PATH="../data/t2-conf"
 
-def bind_model(model, optimizer=None):
+def bind_model(model,processor,trainer, optimizer=None):
     def save(path, *args, **kwargs):
         print("save!!! " + path)
-        state = {
-            'model': model.state_dict(),
-            #'optimizer': optimizer.state_dict()
-        }
-        processor.save_pretrained(path)
-        torch.save(state, os.path.join(path, 'model.pt'))
+        
+        trainer.save_model(path)
         print('Model saved')
 
     def load(path, *args, **kwargs):
         print("load!!! " + path)
-        processor = Wav2Vec2Processor.from_pretrained(path)
-        state = torch.load(os.path.join(path, 'model.pt'))
-        model.load_state_dict(state['model'])
-        # if 'optimizer' in state and optimizer:
-        #     optimizer.load_state_dict(state['optimizer'])
+        processor.from_pretrained(path)
+        model.from_pretrained(path)
         print('Model loaded')
 
     # 추론
     def infer(path, **kwargs):
         return inference(path, model, processor)
 
-    #nsml.bind(save=save, load=load, infer=infer)  # 'nsml.bind' function must be called at the end.
+    nsml.bind(save=save, load=load, infer=infer)  # 'nsml.bind' function must be called at the end.
 
 def prepare_dataset(batch):
     # check that all files have the correct sampling rate
@@ -188,8 +180,8 @@ if __name__ == '__main__':
     if hasattr(config, "num_threads") and int(config.num_threads) > 0:
         torch.set_num_threads(config.num_threads)
 
-    #if config.pause:
-    #    nsml.paused(scope=locals())
+    if config.pause:
+        nsml.paused(scope=locals())
 
     if config.mode == 'train':
         config.dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
@@ -210,12 +202,12 @@ if __name__ == '__main__':
         processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
         model = build_model(config, processor)
-        bind_model(model)
+        
 
         train_dataset = train_dataset.map(speech_file_to_array_fn, remove_columns=train_dataset.column_names)
         test_dataset = test_dataset.map(speech_file_to_array_fn, remove_columns=test_dataset.column_names)
-        train_dataset = train_dataset.map(resample)
-        test_dataset = test_dataset.map(resample)
+        #train_dataset = train_dataset.map(resample)
+        #test_dataset = test_dataset.map(resample)
         train_dataset = train_dataset.map(prepare_dataset, remove_columns=train_dataset.column_names, batch_size=8, num_proc=1, batched=True)
         test_dataset = test_dataset.map(prepare_dataset, remove_columns=test_dataset.column_names, batch_size=8, num_proc=1, batched=True)
 
@@ -227,13 +219,13 @@ if __name__ == '__main__':
             output_dir="container_1/ckpts/",
             logging_dir = "container_1/runs/",
             group_by_length=True,
-            per_device_train_batch_size=8,
-            per_device_eval_batch_size=8,
+            per_device_train_batch_size=config.batch_size,
+            per_device_eval_batch_size=config.batch_size,
             gradient_accumulation_steps=2,
             evaluation_strategy="steps",
-            num_train_epochs=30,
+            num_train_epochs=config.num_epochs,
             fp16=True,
-            save_steps=200,
+            save_steps=10000,
             eval_steps=200,
             logging_steps=200,
             learning_rate=4e-4,
@@ -250,9 +242,18 @@ if __name__ == '__main__':
             tokenizer=processor.feature_extractor,
         )
 
-        trainer.train()
-        trainer.save_model("container_1/wav2vec2-large-960h")
+        bind_model(model,processor,trainer)
         
+
+        trainer.train()
+        #trainer.save_model("container_1/wav2vec2-large-960h")
+        # print("save!!! " + path)
+        # state = {
+        #     'model': model.state_dict(),
+        #     #'optimizer': optimizer.state_dict()
+        # }
+        # torch.save(state, os.path.join(path, 'model.pt'))
+        nsml.save(10)
         # 1. wav2vec2-large-xlsr-kn  #0.3191 cer
 
         print('[INFO] train process is done')

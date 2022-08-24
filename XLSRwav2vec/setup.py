@@ -3,11 +3,10 @@
 from distutils.core import setup
 
 setup(
-    name='kospeech_nsml',
+    name='kospeech_wav2vec',
     version='latest',
     install_requires=[
         # 'torch==1.7.0',
-        # 'levenshtein',
         'librosa >= 0.7.0',
         'numpy',
         'pandas',
@@ -19,9 +18,9 @@ setup(
         'pydub',
         'glob2',
         'omegaconf',
-        "Levenshtein",
         "datasets",
-        "transformers"
+        "transformers",
+        "jiwer == 2.0.0"
     ],
 )
 

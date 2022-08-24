@@ -8,7 +8,6 @@ import json
 import argparse
 from glob import glob
 import numpy as np
-import Levenshtein as Lev
 
 from modules.preprocess import preprocessing, remove_special_characters
 from modules.trainer import trainer
@@ -285,19 +284,3 @@ if __name__ == '__main__':
         print('[INFO] train process is done')
 
 
-
-
-def compute_metrics(pred):
-    pred_logits = pred.predictions
-    pred_ids = np.argmax(pred_logits, axis=-1)
-
-    pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id
-
-    pred_str = processor.batch_decode(pred_ids)
-    # we do not want to group tokens when computing the metrics
-    label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
-    ref = pred_str.replace(' ', '')
-    hyp = label_str.replace(' ', '')
-    dist = Lev.distance(hyp, ref)
-    length = len(ref)
-    return {"cer": dist/length}

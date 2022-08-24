@@ -8,7 +8,6 @@ import json
 import argparse
 from glob import glob
 import numpy as np
-import Levenshtein as Lev
 
 from modules.preprocess import preprocessing, remove_special_characters
 from modules.trainer import trainer

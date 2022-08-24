@@ -103,9 +103,9 @@ def sentence_to_target(sentence, char2id):
 def generate_character_script(data_df, labels_dest):
     print('[INFO] create_script started..')
     char2id, id2char = load_label(os.path.join(labels_dest, "labels.csv"))
-    #from nsml import DATASET_PATH
-    DATASET_PATH = "../data/t2-conf"
-    print(os.getcwd())
+    from nsml import DATASET_PATH
+    # DATASET_PATH = "../data/t2-conf/"
+    # print(os.getcwd())
     dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
     with open(os.path.join(labels_dest,"transcripts.txt"), "w+") as f:
         for audio_path, transcript in data_df.values:

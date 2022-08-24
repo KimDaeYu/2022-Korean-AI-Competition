@@ -552,15 +552,15 @@ def build_model(
 
     
     model = Wav2Vec2ForCTC.from_pretrained(
-        #"facebook/wav2vec2-large-xlsr-53", 
-        "facebook/wav2vec2-large-960h",
+        "facebook/wav2vec2-large-xlsr-53", 
+        #"facebook/wav2vec2-large-960h",
         attention_dropout=0.1,
         hidden_dropout=0.1,
         feat_proj_dropout=0.0,
         mask_time_prob=0.05,
         layerdrop=0.1,
-        #gradient_checkpointing=True, # large xlsr
-        ignore_mismatched_sizes=True, #large 960
+        gradient_checkpointing=True, # large xlsr
+        # ignore_mismatched_sizes=True, #large 960
         ctc_loss_reduction="mean", 
         pad_token_id=processor.tokenizer.pad_token_id,
         vocab_size=len(processor.tokenizer),
