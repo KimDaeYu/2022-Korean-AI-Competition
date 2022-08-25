@@ -204,24 +204,12 @@ if __name__ == '__main__':
         label_path = os.path.join(DATASET_PATH, 'train', 'train_label')
         preprocessing(label_path, os.getcwd())
         dataset = load_dataset(os.path.join(os.getcwd(), 'transcripts.txt'))
-        
-        # train_dataset = dataset['train']
-        # test_dataset = dataset['test']
-        dataset = dataset.map(remove_special_characters)
 
-        # tokenizer & feature_extractor & processor
-        tokenizer = Wav2Vec2CTCTokenizer("./vocab.json", unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
-        feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=False)
-        processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-        model = build_model(config, processor)
-        print(f'Load Model is done')
+        dataset = dataset.map(remove_special_characters)
 
         dataset = dataset.flatten_indices()
         dataset = dataset.map(speech_file_to_array_fn, remove_columns=dataset.column_names,num_proc=7)
         print(f'speech_file_to_array_fn is done')
-
-        #train_dataset = train_dataset.map(resample)
-        #test_dataset = test_dataset.map(resample)
 
         dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names,batched=True,num_proc=7)
         print(f'prepare_dataset is done')
