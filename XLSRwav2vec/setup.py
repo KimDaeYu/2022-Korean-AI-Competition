@@ -18,9 +18,12 @@ setup(
         'pydub',
         'glob2',
         'omegaconf',
-        "datasets",
+        "datasets==2.2.0",
         "transformers",
-        "jiwer == 2.0.0"
+        
+        #"python-Levenshtein"
+        # "python-Levenshtein-wheels",
+        # "jiwer",# == 2.0.0"
     ],
 )
 

@@ -74,7 +74,7 @@ def prepare_dataset(batch):
         batch["labels"] = processor(batch["target_text"]).input_ids
     return batch
 
-cer_metric = load_metric('cer')
+#cer_metric = load_metric('cer')
 def compute_metrics(pred):
     pred_logits = pred.predictions
     pred_ids = np.argmax(pred_logits, axis=-1)
@@ -89,9 +89,9 @@ def compute_metrics(pred):
     print("pred: ",pred_str)
     print("ref : ",label_str)
 
-    cer = cer_metric.compute(references=label_str, predictions=pred_str)
+    #cer = cer_metric.compute(references=label_str, predictions=pred_str)
 
-    return {"cer": cer}
+    return {"cer": 0}
 
 def inference(path, model, **kwargs):
     model.eval()
@@ -189,31 +189,37 @@ if __name__ == '__main__':
         preprocessing(label_path, os.getcwd())
         dataset = load_dataset(os.path.join(os.getcwd(), 'transcripts.txt'))
         
-        train_dataset = dataset['train']
-        test_dataset = dataset['test']
-        train_dataset = train_dataset.map(remove_special_characters)
-        test_dataset = test_dataset.map(remove_special_characters)
+        # train_dataset = dataset['train']
+        # test_dataset = dataset['test']
+        dataset = dataset.map(remove_special_characters)
         # make vocab
-        make_wav2vec_vocab(train_dataset, test_dataset)
+        make_wav2vec_vocab(dataset)
         
+        print(f'make_wav2vec_vocab is done')
         # tokenizer & feature_extractor & processor
         tokenizer = Wav2Vec2CTCTokenizer("./vocab.json", unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
         feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=False)
         processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-
         model = build_model(config, processor)
-        
+        print(f'Load Model is done')
 
-        train_dataset = train_dataset.map(speech_file_to_array_fn, remove_columns=train_dataset.column_names)
-        test_dataset = test_dataset.map(speech_file_to_array_fn, remove_columns=test_dataset.column_names)
+        dataset = dataset.map(speech_file_to_array_fn, remove_columns=dataset.column_names)
+        print(f'speech_file_to_array_fn is done')
+
         #train_dataset = train_dataset.map(resample)
         #test_dataset = test_dataset.map(resample)
-        train_dataset = train_dataset.map(prepare_dataset, remove_columns=train_dataset.column_names, batch_size=8, num_proc=1, batched=True)
-        test_dataset = test_dataset.map(prepare_dataset, remove_columns=test_dataset.column_names, batch_size=8, num_proc=1, batched=True)
+
+        dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names)
+        print(f'prepare_dataset is done')
+        
+        dataset = dataset.train_test_split(test_size=0.2,seed=42)
+        train_dataset = dataset['train']
+        test_dataset = dataset['test']
+        print(f'split Datset is done')
 
         data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        model = build_model(config, processor)
         model.freeze_feature_extractor()
+        print(f'freeze_feature_extractor is done')
 
         training_args = TrainingArguments(
             output_dir="container_1/ckpts/",
@@ -232,6 +238,7 @@ if __name__ == '__main__':
             warmup_steps=int(0.1*1320), #10%
             save_total_limit=2,
         )
+        print(f'train being!')
         trainer = Trainer(
             model=model,
             data_collator=data_collator,

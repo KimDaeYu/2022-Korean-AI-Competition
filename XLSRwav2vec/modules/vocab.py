@@ -99,11 +99,10 @@ class KoreanSpeechVocabulary(Vocabulary):
         except IOError:
             raise IOError("Character label file (csv format) doesn`t exist : {0}".format(label_path))
 
-def make_wav2vec_vocab(train_dataset, test_dataset):
+def make_wav2vec_vocab(dataset):
     # make vocab
-    vocab_train = train_dataset.map(extract_all_chars, batched=True, batch_size=-1, keep_in_memory=True, remove_columns=train_dataset.column_names)
-    vocab_test = test_dataset.map(extract_all_chars, batched=True, batch_size=-1, keep_in_memory=True, remove_columns=test_dataset.column_names)
-    vocab_list = sorted(set(vocab_train["vocab"][0])| set(vocab_test["vocab"][0]))
+    vocab_dataset = dataset.map(extract_all_chars, batched=True, batch_size=-1, keep_in_memory=True, remove_columns=dataset.column_names)
+    vocab_list = sorted(set(vocab_dataset["vocab"][0]))
     vocab_dict = {v: k for k, v in enumerate(vocab_list)}
     vocab_dict["|"] = vocab_dict[" "]
     del vocab_dict[" "]

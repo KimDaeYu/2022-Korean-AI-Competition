@@ -162,9 +162,9 @@ def load_dataset(transcripts_path):
 
     data = Dataset.from_dict({"path":audio_paths,"text":korean_transcripts})
     data = data.shuffle(seed=42)
-    dataset = data.train_test_split(test_size=0.2,seed=42)
+    #dataset = data.train_test_split(test_size=0.2,seed=42)
 
-    return dataset
+    return data
 
 def collate_fn(batch):
     pad_id = 0
