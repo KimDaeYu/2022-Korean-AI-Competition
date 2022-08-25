@@ -304,10 +304,10 @@ def speech_file_to_array_fn(batch):
     # print(batch["path"])
     #speech_array, sampling_rate = torchaudio.load(batch["path"])
     signal = np.memmap(batch["path"], dtype='h', mode='r').astype('float32')
-    non_silence_indices = split(signal, top_db=30)
-    signal = np.concatenate([signal[start:end] for start, end in non_silence_indices])
-    if sum(abs(signal)) <= 80:
-      raise ValueError('[WARN] Silence file in {0}'.format(batch["path"]))
+    # non_silence_indices = split(signal, top_db=30)
+    # signal = np.concatenate([signal[start:end] for start, end in non_silence_indices])
+    # if sum(abs(signal)) <= 80:
+    #   raise ValueError('[WARN] Silence file in {0}'.format(batch["path"]))
 
     #signal = signal / 32767  # normalize audio
     batch["speech"] = signal

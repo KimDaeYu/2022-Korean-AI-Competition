@@ -208,10 +208,7 @@ if __name__ == '__main__':
         # train_dataset = dataset['train']
         # test_dataset = dataset['test']
         dataset = dataset.map(remove_special_characters)
-        # make vocab
-        make_wav2vec_vocab(dataset)
-        
-        print(f'make_wav2vec_vocab is done')
+
         # tokenizer & feature_extractor & processor
         tokenizer = Wav2Vec2CTCTokenizer("./vocab.json", unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
         feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=False)
@@ -226,7 +223,7 @@ if __name__ == '__main__':
         #train_dataset = train_dataset.map(resample)
         #test_dataset = test_dataset.map(resample)
 
-        dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names,batched=False,num_proc=7)
+        dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names,batched=True,num_proc=7)
         print(f'prepare_dataset is done')
         
         dataset = dataset.train_test_split(test_size=0.2,seed=42)
