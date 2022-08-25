@@ -200,58 +200,86 @@ if __name__ == '__main__':
         
         
     if config.mode == 'train':
-        # config.dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
-        # label_path = os.path.join(DATASET_PATH, 'train', 'train_label')
-        # preprocessing(label_path, os.getcwd())
-        # dataset = load_dataset(os.path.join(os.getcwd(), 'transcripts.txt'))
-        # dataset = dataset.map(remove_special_characters)
+        config.dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
+        label_path = os.path.join(DATASET_PATH, 'train', 'train_label')
+        preprocessing(label_path, os.getcwd())
+        dataset = load_dataset(os.path.join(os.getcwd(), 'transcripts.txt'))
         
-        # dataset = dataset.map(speech_file_to_array_fn, remove_columns=dataset.column_names)
-        # print(f'speech_file_to_array_fn is done')
-
-        # dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names, batch_size=8, batched=True)
-        # print(f'prepare_dataset is done')
-        
-        # dataset = dataset.train_test_split(test_size=0.2,seed=42)
         # train_dataset = dataset['train']
         # test_dataset = dataset['test']
-        # print(f'split Datset is done')
+        dataset = dataset.map(remove_special_characters)
+        # make vocab
+        make_wav2vec_vocab(dataset)
+        
+        print(f'make_wav2vec_vocab is done')
+        # tokenizer & feature_extractor & processor
+        tokenizer = Wav2Vec2CTCTokenizer("./vocab.json", unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
+        feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=False)
+        processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+        model = build_model(config, processor)
+        print(f'Load Model is done')
 
-        # data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        # model.freeze_feature_extractor()
-        # print(f'freeze_feature_extractor is done')
+        dataset = dataset.flatten_indices()
+        dataset = dataset.map(speech_file_to_array_fn, remove_columns=dataset.column_names,num_proc=7)
+        print(f'speech_file_to_array_fn is done')
 
-        # training_args = TrainingArguments(
-        #     output_dir="container_1/ckpts/",
-        #     logging_dir = "container_1/runs/",
-        #     group_by_length=True,
-        #     per_device_train_batch_size=config.batch_size,
-        #     per_device_eval_batch_size=config.batch_size,
-        #     gradient_accumulation_steps=2,
-        #     evaluation_strategy="steps",
-        #     num_train_epochs=config.num_epochs,
-        #     fp16=True,
-        #     save_steps=10000,
-        #     eval_steps=200,
-        #     logging_steps=200,
-        #     learning_rate=4e-4,
-        #     warmup_steps=int(0.1*1320), #10%
-        #     save_total_limit=2,
-        # )
-        # print(f'train being!')
-        # trainer = Trainer(
-        #     model=model,
-        #     data_collator=data_collator,
-        #     args=training_args,
-        #     compute_metrics=compute_metrics,
-        #     train_dataset=train_dataset,
-        #     eval_dataset=test_dataset,
-        #     tokenizer=processor.feature_extractor,
-        # )
+        #train_dataset = train_dataset.map(resample)
+        #test_dataset = test_dataset.map(resample)
+
+        dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names,batched=False,num_proc=7)
+        print(f'prepare_dataset is done')
+        
+        dataset = dataset.train_test_split(test_size=0.2,seed=42)
+        train_dataset = dataset['train']
+        test_dataset = dataset['test']
+        print(f'split Datset is done')
+
+        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+        model.freeze_feature_extractor()
+        print(f'freeze_feature_extractor is done')
+
+        training_args = TrainingArguments(
+            output_dir="container_1/ckpts/",
+            logging_dir = "container_1/runs/",
+            group_by_length=True,
+            per_device_train_batch_size=config.batch_size,
+            per_device_eval_batch_size=config.batch_size,
+            gradient_accumulation_steps=2,
+            eval_accumulation_steps=2,
+            evaluation_strategy="steps",
+            num_train_epochs=config.num_epochs,
+            fp16=True,
+            save_steps=10000,
+            eval_steps=200,
+            logging_steps=200,
+            learning_rate=4e-4,
+            warmup_steps=int(0.1*1320), #10%
+            save_total_limit=2,
+        )
+        print(f'train being!')
+        trainer = Trainer(
+            model=model,
+            data_collator=data_collator,
+            args=training_args,
+            compute_metrics=compute_metrics,
+            train_dataset=train_dataset,
+            eval_dataset=test_dataset,
+            tokenizer=processor.feature_extractor,
+        )
 
         bind_model(model,processor)
+        
 
-        nsml.save(0)
+        trainer.train()
+        #trainer.save_model("container_1/wav2vec2-large-960h")
+        # print("save!!! " + path)
+        # state = {
+        #     'model': model.state_dict(),
+        #     #'optimizer': optimizer.state_dict()
+        # }
+        # torch.save(state, os.path.join(path, 'model.pt'))
+        nsml.save(config.num_epochs)
+        # 1. wav2vec2-large-xlsr-kn  #0.3191 cer
 
         print('[INFO] train process is done')
 
