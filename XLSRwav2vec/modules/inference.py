@@ -39,15 +39,21 @@ def single_infer(model, audio_path, processor):
     if isinstance(model, nn.DataParallel):
         model = model.module
     model.eval()
-
+    try:
+        print(model.get_device())
+    except Exception as e:
+        print("model not in cuda!")
+        
     inputs = processor(test_dataset["speech"], sampling_rate=16_000, return_tensors="pt", padding=True)
+    input_values = inputs.input_values.to(device)
+    try:
+        print(inputs.get_device())
+    except Exception as e:
+        print("inputs not in cuda!")
 
     with torch.no_grad():
-        logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
+        logits = model(input_values).logits
 
     predicted_ids = torch.argmax(logits, dim=-1)
-    # inputs = processor(feature, sampling_rate=16_000, return_tensors="pt", padding=True)
-    # logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
-    # predicted_ids = torch.argmax(logits, dim=-1)
     
     return processor.batch_decode(predicted_ids)

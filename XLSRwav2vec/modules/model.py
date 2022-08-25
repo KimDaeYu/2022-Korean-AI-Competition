@@ -545,7 +545,7 @@ def build_deepspeech2(
 def build_model(
         config,
         processor,
-        #device: torch.device,
+        device: torch.device,
 ) -> nn.DataParallel:
 
     input_size = config.n_mels
@@ -565,5 +565,4 @@ def build_model(
         pad_token_id=processor.tokenizer.pad_token_id,
         vocab_size=len(processor.tokenizer),
     )
-
     return model

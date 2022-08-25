@@ -43,17 +43,18 @@ import nsml
 from nsml import DATASET_PATH
 #DATASET_PATH="../data/t2-conf"
 
-def bind_model(model,processor,trainer, optimizer=None):
+def bind_model(model,processor, optimizer=None):
     def save(path, *args, **kwargs):
         print("save!!! " + path)
-        
-        trainer.save_model(path)
+        model.save_pretrained(path)
+        processor.save_pretrained(path)
         print('Model saved')
 
     def load(path, *args, **kwargs):
         print("load!!! " + path)
         processor.from_pretrained(path)
         model.from_pretrained(path)
+        model.to("cuda")
         print('Model loaded')
 
     # 추론
@@ -93,15 +94,20 @@ def compute_metrics(pred):
 
     return {"cer": 0}
 
-def inference(path, model, **kwargs):
+def inference(path, model, processor, **kwargs):
     model.eval()
 
     results = []
     for i in glob(os.path.join(path, '*')):
+        print("===========================")
+        print('filename : ', i.split('/')[-1])
+        print(i)
+        result = single_infer(model, i, processor)[0]
+        print("result : " , result)
         results.append(
             {
                 'filename': i.split('/')[-1],
-                'text': single_infer(model, i, processor)[0]
+                'text': result
             }
         )
     return sorted(results, key=lambda x: x['filename'])
@@ -179,89 +185,73 @@ if __name__ == '__main__':
     device = 'cuda' if config.use_cuda == True else 'cpu'
     if hasattr(config, "num_threads") and int(config.num_threads) > 0:
         torch.set_num_threads(config.num_threads)
+    
+    # tokenizer & feature_extractor & processor
+    tokenizer = Wav2Vec2CTCTokenizer("./vocab.json", unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
+    feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=False)
+    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    model = build_model(config, processor, device)
+    print(f'Load Model is done')
+    
+    bind_model(model,processor)
 
     if config.pause:
         nsml.paused(scope=locals())
-
-    if config.mode == 'train':
-        config.dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
-        label_path = os.path.join(DATASET_PATH, 'train', 'train_label')
-        preprocessing(label_path, os.getcwd())
-        dataset = load_dataset(os.path.join(os.getcwd(), 'transcripts.txt'))
         
+        
+    if config.mode == 'train':
+        # config.dataset_path = os.path.join(DATASET_PATH, 'train', 'train_data')
+        # label_path = os.path.join(DATASET_PATH, 'train', 'train_label')
+        # preprocessing(label_path, os.getcwd())
+        # dataset = load_dataset(os.path.join(os.getcwd(), 'transcripts.txt'))
+        # dataset = dataset.map(remove_special_characters)
+        
+        # dataset = dataset.map(speech_file_to_array_fn, remove_columns=dataset.column_names)
+        # print(f'speech_file_to_array_fn is done')
+
+        # dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names, batch_size=8, batched=True)
+        # print(f'prepare_dataset is done')
+        
+        # dataset = dataset.train_test_split(test_size=0.2,seed=42)
         # train_dataset = dataset['train']
         # test_dataset = dataset['test']
-        dataset = dataset.map(remove_special_characters)
-        # make vocab
-        make_wav2vec_vocab(dataset)
-        
-        print(f'make_wav2vec_vocab is done')
-        # tokenizer & feature_extractor & processor
-        tokenizer = Wav2Vec2CTCTokenizer("./vocab.json", unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|")
-        feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, sampling_rate=16000, padding_value=0.0, do_normalize=True, return_attention_mask=False)
-        processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-        model = build_model(config, processor)
-        print(f'Load Model is done')
+        # print(f'split Datset is done')
 
-        dataset = dataset.map(speech_file_to_array_fn, remove_columns=dataset.column_names)
-        print(f'speech_file_to_array_fn is done')
+        # data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+        # model.freeze_feature_extractor()
+        # print(f'freeze_feature_extractor is done')
 
-        #train_dataset = train_dataset.map(resample)
-        #test_dataset = test_dataset.map(resample)
+        # training_args = TrainingArguments(
+        #     output_dir="container_1/ckpts/",
+        #     logging_dir = "container_1/runs/",
+        #     group_by_length=True,
+        #     per_device_train_batch_size=config.batch_size,
+        #     per_device_eval_batch_size=config.batch_size,
+        #     gradient_accumulation_steps=2,
+        #     evaluation_strategy="steps",
+        #     num_train_epochs=config.num_epochs,
+        #     fp16=True,
+        #     save_steps=10000,
+        #     eval_steps=200,
+        #     logging_steps=200,
+        #     learning_rate=4e-4,
+        #     warmup_steps=int(0.1*1320), #10%
+        #     save_total_limit=2,
+        # )
+        # print(f'train being!')
+        # trainer = Trainer(
+        #     model=model,
+        #     data_collator=data_collator,
+        #     args=training_args,
+        #     compute_metrics=compute_metrics,
+        #     train_dataset=train_dataset,
+        #     eval_dataset=test_dataset,
+        #     tokenizer=processor.feature_extractor,
+        # )
 
-        dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names)
-        print(f'prepare_dataset is done')
-        
-        dataset = dataset.train_test_split(test_size=0.2,seed=42)
-        train_dataset = dataset['train']
-        test_dataset = dataset['test']
-        print(f'split Datset is done')
+        bind_model(model,processor)
 
-        data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        model.freeze_feature_extractor()
-        print(f'freeze_feature_extractor is done')
-
-        training_args = TrainingArguments(
-            output_dir="container_1/ckpts/",
-            logging_dir = "container_1/runs/",
-            group_by_length=True,
-            per_device_train_batch_size=config.batch_size,
-            per_device_eval_batch_size=config.batch_size,
-            gradient_accumulation_steps=2,
-            evaluation_strategy="steps",
-            num_train_epochs=config.num_epochs,
-            fp16=True,
-            save_steps=10000,
-            eval_steps=200,
-            logging_steps=200,
-            learning_rate=4e-4,
-            warmup_steps=int(0.1*1320), #10%
-            save_total_limit=2,
-        )
-        print(f'train being!')
-        trainer = Trainer(
-            model=model,
-            data_collator=data_collator,
-            args=training_args,
-            compute_metrics=compute_metrics,
-            train_dataset=train_dataset,
-            eval_dataset=test_dataset,
-            tokenizer=processor.feature_extractor,
-        )
-
-        bind_model(model,processor,trainer)
-        
-
-        trainer.train()
-        #trainer.save_model("container_1/wav2vec2-large-960h")
-        # print("save!!! " + path)
-        # state = {
-        #     'model': model.state_dict(),
-        #     #'optimizer': optimizer.state_dict()
-        # }
-        # torch.save(state, os.path.join(path, 'model.pt'))
-        nsml.save(10)
-        # 1. wav2vec2-large-xlsr-kn  #0.3191 cer
+        nsml.save(0)
 
         print('[INFO] train process is done')
 
