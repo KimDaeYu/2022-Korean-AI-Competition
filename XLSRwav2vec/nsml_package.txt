@@ -1,3 +1,4 @@
 #registry koreanai dckr_pat_7OmsQkoAnQyz7ZkQb-ZSk0LeNlI registry.hub.docker.com
+gcc
 libsndfile1
 ffmpeg

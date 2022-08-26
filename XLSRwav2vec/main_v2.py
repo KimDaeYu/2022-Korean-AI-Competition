@@ -9,6 +9,7 @@ import argparse
 from glob import glob
 import numpy as np
 from datasets import load_metric
+import tqdm
 
 from modules.preprocess import preprocessing, remove_special_characters
 from modules.trainer import trainer
@@ -32,6 +33,7 @@ from transformers import Wav2Vec2CTCTokenizer
 from transformers import Wav2Vec2FeatureExtractor
 from transformers import Wav2Vec2Processor
 from transformers import TrainingArguments, Trainer
+from transformers import AdamW, get_scheduler
 
 import nsml
 from nsml import DATASET_PATH
@@ -185,7 +187,7 @@ if __name__ == '__main__':
     model = build_model(config, processor, device)
     print(f'Load Model is done')
     
-    #bind_model(model,processor)
+    bind_model(model,processor)
     
     if config.pause:
         nsml.paused(scope=locals())
@@ -215,42 +217,75 @@ if __name__ == '__main__':
         model.freeze_feature_extractor()
         print(f'freeze_feature_extractor is done')
 
-        training_args = TrainingArguments(
-            output_dir="container_1/ckpts/",
-            logging_dir = "container_1/runs/",
-            group_by_length=True,
-            per_device_train_batch_size=4,
-            per_device_eval_batch_size=4,
-            gradient_accumulation_steps=2,
-            eval_accumulation_steps=2,
-            evaluation_strategy="steps",
-            num_train_epochs=config.num_epochs,
-            fp16=True,
-            save_steps=20,
-            eval_steps=200,
-            logging_steps=200,
-            learning_rate=4e-4,
-            warmup_steps=int(0.1*1320), #10%
-            save_total_limit=2,
-        )
-        print(f'train being!')
-        
-        trainer = Trainer(
-            model=model,
-            data_collator=data_collator,
-            args=training_args,
-            compute_metrics=compute_metrics,
-            train_dataset=train_dataset,
-            eval_dataset=test_dataset,
-            tokenizer=processor.feature_extractor,
-        )
+        # 각 종류별 데이터 로더 생성
+        train_dataloader = DataLoader(train_dataset, 
+                                    shuffle=True, 
+                                    batch_size=config.batch_size, 
+                                    collate_fn=data_collator)
+        eval_dataloader = DataLoader(test_dataset,
+                                    shuffle=True,
+                                    batch_size=config.batch_size,
+                                    collate_fn=data_collator)
 
-        bind_model(model,processor)
+        # 최적화 함수 정의
+        optimizer = AdamW(model.parameters(), lr=4e-4)
+
+        # 에포크 개수 설정
+        num_epochs = 3
+        # 학습 스텝 수 계산
+        num_training_steps = config.num_epochs * len(train_dataloader)
+        # 학습 스케쥴러 설정
+        lr_scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=20, num_training_steps=num_training_steps)
+
+        # GPU로 모델을 이동
+        model.to(device)
+
+        # 진행 상황바 정의
+        progress_bar = tqdm(range(num_training_steps))
+
+        # 모델을 학습 모드로 전환
         
         print("train start")
-        trainer.train()
+        # 학습 루프 시작
+        for epoch in range(num_epochs):
+            model.train()
+            print("epoch : ", epoch)
+            for batch in train_dataloader:
+                # 현재 배치 중에서 입력값을 모두 GPU로 이동.
+                batch = {k: v.to(device) for k, v in batch.items()}
+                # 모델 실행
+                outputs = model(**batch)
+                # 손실값 가져오기
+                loss = outputs.loss
+                # 역전파 수행
+                loss.backward()
 
-        nsml.save(config.num_epochs)
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+                progress_bar.update(1)
+            
+            print('[INFO] Epoch %d (Training) Loss %0.4f CER %0.4f' % (epoch, train_loss, train_cer))
+
+            # 평가 메트릭 가져오기
+            # cer_metric = load_metric("cer")
+            # 모델을 평가 모드로 전환
+            model.eval()
+            for batch in eval_dataloader:
+                batch = {k: v.to(device) for k, v in batch.items()}
+                with torch.no_grad():
+                    outputs = model(**batch)
+
+                logits = outputs.logits
+                predictions = torch.argmax(logits, dim=-1)
+                pred_str = processor.batch_decode(predictions)
+                cer_metric.add_batch(predictions=predictions, references=batch["labels"])
+
+            # 평가 결과 계산 및 출력 
+            cer_metric.compute()
+            nsml.save(epoch)
+
+
         # 1. wav2vec2-large-xlsr-kn  #0.3191 cer
 
         print('[INFO] train process is done')

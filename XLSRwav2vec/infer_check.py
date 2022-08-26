@@ -16,12 +16,12 @@ from modules.utils import (
     get_criterion,
     get_lr_scheduler,
 )
-from modules.audio import (
-    FilterBankConfig,
-    MelSpectrogramConfig,
-    MfccConfig,
-    SpectrogramConfig,
-)
+# from modules.audio import (
+#     FilterBankConfig,
+#     MelSpectrogramConfig,
+#     MfccConfig,
+#     SpectrogramConfig,
+# )
 from modules.model import build_model, build_deepspeech2
 from modules.data import load_dataset, DataCollatorCTCWithPadding
 from modules.utils import Optimizer

@@ -1,29 +1,29 @@
-#registry koreanai dckr_pat_7OmsQkoAnQyz7ZkQb-ZSk0LeNlI registry.hub.docker.com
-#nsml: pytorch/pytorch:1.6.0-cuda10.1-cudnn7-runtime
+#nsml: pytorch/pytorch:1.12.1-cuda11.3-cudnn8-runtime
 from distutils.core import setup
 
 setup(
     name='kospeech_wav2vec',
     version='latest',
     install_requires=[
-        # 'torch==1.7.0',
-        'librosa >= 0.7.0',
+        #'torch==1.7.0',
+        'librosa',
         'numpy',
         'pandas',
         'tqdm',
         'matplotlib',
         'astropy',
         'sentencepiece',
-        'torchaudio==0.6.0',
+        #'torchaudio',
         'pydub',
         'glob2',
         'omegaconf',
-        "datasets==2.2.0",
+        "datasets",
         "transformers",
-        
+        "jiwer",
+        "sklearn"
         #"python-Levenshtein"
         # "python-Levenshtein-wheels",
-        # "jiwer",# == 2.0.0"
+        
     ],
 )
 
