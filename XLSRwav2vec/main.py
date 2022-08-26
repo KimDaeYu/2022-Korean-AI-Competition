@@ -64,13 +64,10 @@ def bind_model(model,processor, optimizer=None):
     nsml.bind(save=save, load=load, infer=infer)  # 'nsml.bind' function must be called at the end.
 
 def prepare_dataset(batch):
-    # check that all files have the correct sampling rate
-    assert (
-        len(set(batch["sampling_rate"])) == 1
-    ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
-
-    batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
-    
+    signal = [ np.memmap(sample, dtype='h', mode='r').astype('float32') for sample in batch["path"] ]
+    batch["sampling_rate"] = [16_000] * len(signal)
+    batch["target_text"] = batch["text"]
+    batch["input_values"] = processor(signal, sampling_rate=batch["sampling_rate"][0]).input_values
     with processor.as_target_processor():
         batch["labels"] = processor(batch["target_text"]).input_ids
     return batch
@@ -182,7 +179,9 @@ if __name__ == '__main__':
     random.seed(config.seed)
     torch.manual_seed(config.seed)
     torch.cuda.manual_seed_all(config.seed)
-    device = 'cuda' if config.use_cuda == True else 'cpu'
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    #torch.cuda.set_device(0)
+    print("device : ",device)
     if hasattr(config, "num_threads") and int(config.num_threads) > 0:
         torch.set_num_threads(config.num_threads)
     
@@ -193,8 +192,8 @@ if __name__ == '__main__':
     model = build_model(config, processor, device)
     print(f'Load Model is done')
     
-    bind_model(model,processor)
-
+    #bind_model(model,processor)
+    
     if config.pause:
         nsml.paused(scope=locals())
         
@@ -208,10 +207,10 @@ if __name__ == '__main__':
         dataset = dataset.map(remove_special_characters)
 
         dataset = dataset.flatten_indices()
-        dataset = dataset.map(speech_file_to_array_fn, remove_columns=dataset.column_names,num_proc=7)
-        print(f'speech_file_to_array_fn is done')
+        #dataset = dataset.map(speech_file_to_array_fn, remove_columns=dataset.column_names,num_proc=10)
+        #print(f'speech_file_to_array_fn is done')
 
-        dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names,batched=True,num_proc=7)
+        dataset = dataset.map(prepare_dataset, remove_columns=dataset.column_names,batched=True, num_proc=10)
         print(f'prepare_dataset is done')
         
         dataset = dataset.train_test_split(test_size=0.2,seed=42)
@@ -220,7 +219,7 @@ if __name__ == '__main__':
         print(f'split Datset is done')
 
         data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-        model.freeze_feature_extractor()
+        model.module.freeze_feature_extractor()
         print(f'freeze_feature_extractor is done')
 
         training_args = TrainingArguments(
@@ -252,9 +251,9 @@ if __name__ == '__main__':
             tokenizer=processor.feature_extractor,
         )
 
-        bind_model(model,processor)
+        bind_model(model.module,processor)
         
-
+        print("train start")
         trainer.train()
         #trainer.save_model("container_1/wav2vec2-large-960h")
         # print("save!!! " + path)

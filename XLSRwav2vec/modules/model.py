@@ -564,5 +564,5 @@ def build_model(
         ctc_loss_reduction="mean", 
         pad_token_id=processor.tokenizer.pad_token_id,
         vocab_size=len(processor.tokenizer),
-    )
+    ).to(device)
     return model
